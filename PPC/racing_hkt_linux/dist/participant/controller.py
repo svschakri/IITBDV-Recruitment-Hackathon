@@ -13,36 +13,109 @@ You must implement two functions: plan() and control()
 # ─── CONTROLLER ───────────────────────────────────────────────────────────────
 import numpy as np
 
+def Distance(a,b):
+    dx = a[0]-b[0]
+    dy = a[1]-b[1]
+    return dx*dx + dy*dy
 
+integral=0
+previous_error=0
+ 
+# def steering(path: list[dict], state: dict):
 
-def steering(path: list[dict], state: dict):
+#     length_of_car = 2.6
+#     # Calculate steering angle based on path and vehicle state
+#     mi=9000
+#     req="not Known"
+#     for a in path :
+#         if Distance([a["x"],a["y"]],[state["x"],state["y"]]) < mi :
+#             mi=Distance([a["x"],a["y"]],[state["x"],state["y"]])
+#             req=a
+    
+#     c = path.index(req)
+#     req = path[(c + 6) % len(path)]
 
-    length_of_car = 2.6
-    # Calculate steering angle based on path and vehicle state
+#     heading = np.arctan2(req["y"]-state["y"], req["x"]-state["x"])
+#     error = normalize_angle(heading - state["yaw"])
+#     steer = 2 * error
+#     # Default steer value
 
+#     # 0.5 in the max steering angle in radians (about 28.6 degrees)
+#     return np.clip(steer, -0.5, 0.5)
 
+last_index = 0
 
+def steering(path, state):
+    global last_index
 
+    sx = state["x"]
+    sy = state["y"]
 
+    search_range = 15
+    start = last_index
+    end = min(len(path), start + search_range)
 
-    steer = 0.0 # Default steer value
-    # 0.5 in the max steering angle in radians (about 28.6 degrees)
+    mi = 1e9
+    best = start
+
+    for i in range(start, end):
+        a = path[i]
+        dx = a["x"] - sx
+        dy = a["y"] - sy
+        d = dx*dx + dy*dy
+
+        if d < mi:
+            mi = d
+            best = i
+
+    last_index = best
+
+    lookahead = min(best + 8, len(path)-1)
+    req = path[lookahead]
+
+    heading = np.arctan2(req["y"]-sy, req["x"]-sx)
+    error = normalize_angle(heading - state["yaw"])
+
+    steer = 2 * error
     return np.clip(steer, -0.5, 0.5)
 
 
 def throttle_algorithm(target_speed, current_speed, dt):
 
-
-
-
-
+    global integral, previous_error
+    Kp=1.2
+    Ki=0.02
+    Kd=0.1
     
-    
-    # generate the output for throttle command
+    error = target_speed - current_speed
+
+    # Integral
+    integral += error * dt
+
+    # Derivative
+    derivative = (error - previous_error) / dt
+
+    previous_error = error
+
+    # PID output
+    output = Kp*error + Ki*integral + Kd*derivative
+
     throttle = 0
-    brake = 0.0
-    # clip throttle and brake to [0, 1]
-    return np.clip(throttle, 0.0, 1.0), np.clip(brake, 0.0, 1.0)
+    brake = 0
+
+    if output > 0:
+        throttle = np.clip(output, 0.0, 3.0)
+        brake = 0
+    else:
+        brake = np.clip(-output, 0.0, 1.0)
+        throttle = 0
+
+    return throttle, brake
+
+
+def normalize_angle(angle):
+    return np.arctan2(np.sin(angle), np.cos(angle))
+
 
 def control(
     path: list[dict],
@@ -78,8 +151,11 @@ def control(
    
     # TODO: implement your controller here
     steer = steering(path, state)
-    target_speed = 5.0  # m/s, adjust as needed
-    global integral
+    curvature = abs(steer)
+
+    target_speed = 100 * np.exp(-2 * curvature)
+    target_speed = np.clip(target_speed, 15, 50 )
+    
     throttle, brake = throttle_algorithm(target_speed, state["vx"], 0.05)
 
     return throttle, steer, brake
