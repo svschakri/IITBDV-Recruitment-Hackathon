@@ -70,7 +70,7 @@ def steering(path, state):
 
     last_index = best
 
-    lookahead = min(best + 8, len(path)-1)
+    lookahead = (best + 8)%len(path)
     req = path[lookahead]
 
     heading = np.arctan2(req["y"]-sy, req["x"]-sx)
